@@ -44,7 +44,7 @@ export async function validateTextDocument(textDocument: TextDocument, settings:
         version: textDocument.version,
     };
     const doc = createTextDocument(docInfo);
-    const docVal = new DocumentValidator(doc, { noConfigSearch: true }, settings);
+    const docVal = new DocumentValidator(doc, { noConfigSearch: false }, settings);
     await docVal.prepare();
     const r = await docVal.checkDocumentAsync(true);
     const diags = r

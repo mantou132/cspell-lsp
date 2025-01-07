@@ -1,0 +1,20 @@
+{
+  "name": "cspell-lsp",
+  "version": "1.0.3",
+  "description": "This extension performs spell checking in source code files, using the [cspell library](https://cspell.org/).",
+  "main": "index.js",
+  "bin": "./dist/bundle.mjs",
+  "files": [],
+  "scripts": {
+    "prepublishOnly": "bun build ./main.ts --outfile=dist/bundle.mjs --target=node"
+  },
+  "author": "",
+  "license": "GPL-3.0-only",
+  "homepage": "https://github.com/mantou132/cspell-lsp#readme",
+  "dependencies": {
+    "cspell-lib": "^8.17.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "vscode-languageserver-types": "^3.17.5"
+  }
+}
