@@ -1,27 +1,18 @@
 
 import type { SpellingDictionary, SuggestionResult, SuggestOptions } from 'cspell-lib';
-import { CompoundWordsMethod, constructSettingsForText, getDefaultSettings, getDictionary, IssueType, Text } from 'cspell-lib';
-import type { CancellationToken, CodeActionParams, Range as LangServerRange, RequestHandler, TextDocuments } from 'vscode-languageserver/node.js';
-import { ResponseError } from 'vscode-languageserver/node.js';
+import { CompoundWordsMethod, getDictionary, IssueType, Text } from 'cspell-lib';
+import type { CodeActionParams, Range as LangServerRange, TextDocuments } from 'vscode-languageserver/node.js';
 import type { TextDocument } from 'vscode-languageserver-textdocument';
 import { Diagnostic, WorkspaceEdit } from 'vscode-languageserver-types';
 import { CodeAction, CodeActionKind, TextEdit } from 'vscode-languageserver-types';
 
 import * as Validator from './validator.mjs';
-import { getSettigsForDocument, userWords } from './main';
-
-function extractText(textDocument: TextDocument, range: LangServerRange) {
-  return textDocument.getText(range);
-}
+import { dictionaryPath, getSettingsForDocument } from './main';
 
 function extractDiagnosticData(diag: Diagnostic): Validator.SpellCheckerDiagnosticData {
   const { data } = diag;
   if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
   return data as Validator.SpellCheckerDiagnosticData;
-}
-
-export function createOnActionResolveHandler(): RequestHandler<CodeAction, CodeAction, void> {
-  return (_action: CodeAction, _token: CancellationToken) => { return new ResponseError(0, "Error resolving command"); }
 }
 
 export function createOnCodeActionHandler(
@@ -32,7 +23,11 @@ export function createOnCodeActionHandler(
   return (params) => codeActionHandler.handler(params);
 }
 
-
+export interface AddWorkArg {
+  uri: string,
+  range: LangServerRange,
+  message: string
+}
 class CodeActionHandler {
   private sugGen: SuggestionGenerator;
 
@@ -70,23 +65,37 @@ class CodeActionHandler {
     };
 
     const actions = await this.handlerCSpell({ ...ctx, diags: spellCheckerDiags });
-    const codeAction: CodeAction = {
-      title: "Add to dictrionary",
+    
+    const arg = {
+      uri: params.textDocument.uri,
+      range: diagnostics[0].range,
+      message: diagnostics[0].message
+    }
+
+    if (dictionaryPath) {
+      actions.push({
+        title: "Add to dictionary",
+        kind: CodeActionKind.QuickFix,
+        diagnostics: diagnostics,
+        command: {
+          title: "Add to dictionary",
+          command: "AddToDictionary",
+          arguments: [arg]
+        },
+      });
+    }
+
+    
+    actions.push({
+      title: "Add to `cspell.json`",
       kind: CodeActionKind.QuickFix,
       diagnostics: diagnostics,
       command: {
-        title: "Add to dictrionary",
-        command: "AddToDictionary",
-        arguments: [
-          {
-            uri: params.textDocument.uri,
-            range: diagnostics[0].range,
-            message: diagnostics[0].message
-          }
-        ]
+        title: "Add to `cspell.json`",
+        command: "AddToConfig",
+        arguments: [arg]
       },
-    };
-    actions.push(codeAction);
+    });
 
     return actions;
   }
@@ -114,7 +123,7 @@ class CodeActionHandler {
       let diagWord: string | undefined;
       for (const diag of spellCheckerDiags) {
         const { issueType = IssueType.spelling, suggestions } = extractDiagnosticData(diag);
-        const srcWord = extractText(textDocument, diag.range);
+        const srcWord = textDocument.getText(diag.range);
         diagWord = diagWord || srcWord;
         const sugs: Validator.Suggestion[] = suggestions ?? (await getSuggestions(srcWord));
         sugs.map(({ word, isPreferred }) => ({ word: Text.isLowerCase(word) ? Text.matchCase(srcWord, word) : word, isPreferred }))
@@ -176,7 +185,7 @@ const regexJoinedWords = /[+]/g;
 class SuggestionGenerator {
 
   async genSuggestions(doc: TextDocument, word: string): Promise<SuggestionResult[]> {
-    const settings = await getSettigsForDocument(doc);
+    const settings = await getSettingsForDocument(doc);
 
     const dictionary = await getDictionary(settings);
     const numSuggestions = 5;
